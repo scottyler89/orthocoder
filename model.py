@@ -107,93 +107,13 @@ class Decoder(nn.Module):
         h = self.leaky_relu(self.fc5(h))
         return self.sigmoid(self.fc6(h))  # Use Sigmoid for final output
 
-################33
-# 3 layers?
-
-""" 
-class Encoder(nn.Module):
-    def __init__(self, n_features, n_latent=32):
-        super(Encoder, self).__init__()
-        self.fc1 = nn.Linear(n_features, 128)
-        self.fc2 = nn.Linear(128, 64)
-        self.fc3 = nn.Linear(64, 2 * n_latent)
-    #
-    def forward(self, x):
-        h = self.leaky_relu(self.fc1(x))
-        h = self.leaky_relu(self.fc2(h))
-        return self.fc3(h)
-
-
-class Decoder(nn.Module):
-    def __init__(self, n_latent, n_covars, n_features):
-        super(Decoder, self).__init__()
-        self.fc1 = nn.Linear(n_latent + n_covars, 64)
-        self.fc2 = nn.Linear(64, 128)
-        self.fc3 = nn.Linear(128, n_features)
-    #
-    def forward(self, z, covars):
-        z_covars = torch.cat((z, covars), dim=1)
-        h = self.leaky_relu(self.fc1(z_covars))
-        h = self.leaky_relu(self.fc2(h))
-        return self.fc3(h)
- """
-
-
-
-#########################################
-## Add skip?
-""" 
-class Encoder(nn.Module):
-    def __init__(self, n_features, n_latent=32):
-        super(Encoder, self).__init__()
-        self.fc1 = nn.Linear(n_features, 1024)
-        self.fc2 = nn.Linear(1024, 512)
-        self.fc3 = nn.Linear(512, 256)
-        self.fc4 = nn.Linear(256, 256)  # Changed for residual connection
-        self.fc5 = nn.Linear(256, 128)
-        self.fc6 = nn.Linear(128, 2 * n_latent)
-        self.leaky_relu = nn.LeakyReLU()
-    #
-    def forward(self, x):
-        h1 = self.leaky_relu(self.fc1(x))
-        h2 = self.leaky_relu(self.fc2(h1))
-        h3 = self.leaky_relu(self.fc3(h2))
-        h4 = self.leaky_relu(self.fc4(h3 + h2))  # Adding residual connection
-        h5 = self.leaky_relu(self.fc5(h4))
-        return self.fc6(h5)
-
-
-class Decoder(nn.Module):
-    def __init__(self, n_latent, n_covars, n_features):
-        super(Decoder, self).__init__()
-        self.fc1 = nn.Linear(n_latent + n_covars, 64)
-        self.fc2 = nn.Linear(64, 128)
-        self.fc3 = nn.Linear(128, 256)
-        self.fc4 = nn.Linear(256, 256)  # Changed for residual connection
-        self.fc5 = nn.Linear(256, 512)
-        self.fc6 = nn.Linear(512, n_features)
-        self.leaky_relu = nn.LeakyReLU()
-        self.sigmoid = nn.Sigmoid()
-    #
-    def forward(self, z, covars):
-        z_covars = torch.cat((z, covars), dim=1)
-        h1 = self.leaky_relu(self.fc1(z_covars))
-        h2 = self.leaky_relu(self.fc2(h1))
-        h3 = self.leaky_relu(self.fc3(h2))
-        h4 = self.leaky_relu(self.fc4(h3 + h2))  # Adding residual connection
-        h5 = self.leaky_relu(self.fc5(h4))
-        return self.sigmoid(self.fc6(h5))
- """
-
-
-
 
 
 #########################################
 
-class VAE(nn.Module):
+class orthocoder(nn.Module):
     def __init__(self, n_features, n_covars, n_latent=32):
-        super(VAE, self).__init__()
+        super(orthocoder, self).__init__()
         ## USED TO HAVE JUST REAL FEATURES, BUT TRYING TO CONCAT W/INPUT
         #self.encoder = Encoder(n_features, n_latent)
         self.encoder = Encoder(n_features+n_covars, n_latent)
@@ -259,42 +179,6 @@ class CustomVAELoss(nn.Module):
 
 
 
-##################################################
-""" 
-class CustomVAELoss(nn.Module):
-    def __init__(self, reduction='mean'):
-        super(CustomVAELoss, self).__init__()
-        self.reduction = reduction
-    #
-    def forward(self, input_data, recon_data, mu, log_var, covariates):
-        # Reconstruction loss
-        recon_loss = F.mse_loss(recon_data, input_data, reduction=self.reduction)
-        # KL divergence
-        kld_loss = -0.5 * torch.mean(1 + log_var - mu.pow(2) - log_var.exp())
-        # Orthogonality loss
-        ortho_loss = 0
-        print("mu.shape:",mu.shape)
-        print("log_var.shape",log_var.shape)
-        print("covariates.shape", covariates.shape)
-        # Deltas
-        mu_delta = torch.zeros(mu.shape[1], mu.shape[0], mu.shape[0])
-        covar_delta = torch.zeros(covariates.shape[1], covariates.shape[0], covariates.shape[0])
-        for i in range(mu.shape[1]):
-            mu_delta[i] = torch.abs(mu[:, i].unsqueeze(-1) - mu[:, i].unsqueeze(0))
-        for i in range(covariates.shape[1]):
-            covar_delta[i] = torch.abs(covariates[:, i].unsqueeze(-1) - covariates[:, i].unsqueeze(0))
-        print("mu_delta.shape:", mu_delta.shape)
-        print("covar_delta.shape:", covar_delta.shape)
-        for i in range(mu.shape[1]):
-            for j in range(covariates.shape[1]):
-                # Calculate cosine similarity
-                cos_sim = torch.abs(F.cosine_similarity(mu_delta[i].flatten(), covar_delta[j].flatten(), dim=0))
-                ortho_loss += torch.mean(cos_sim)
-        ortho_loss /= (mu.shape[1] * covariates.shape[1])  # take the mean over all combinations
-        ortho_scale = 5e-2
-        print("recon_loss:",recon_loss, "kld_loss:", kld_loss ,"  ortho_loss:",ortho_scale*ortho_loss)
-        return recon_loss + 0*kld_loss + ortho_scale*ortho_loss 
- """
 ###################################
 
 
@@ -336,7 +220,7 @@ n_features = pca_nmf_torch.shape[1]  # Number of primary data features
 n_covars = covar_torch.shape[1]  # Number of covariates
 learning_rate=1e-6
 n_latent = 48
-model = VAE(n_features, n_covars, n_latent)
+model = orthocoder(n_features, n_covars, n_latent)
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 #optimizer = torch.optim.RMSprop(model.parameters(), lr=learning_rate)
 # RMSprop
